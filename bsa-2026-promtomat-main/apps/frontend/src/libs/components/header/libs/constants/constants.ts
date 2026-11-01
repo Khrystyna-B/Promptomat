@@ -1,0 +1,4 @@
+const ACCOUNT_MENU_ID = "account-menu";
+const PANEL_CLOSE_DURATION_MS = 180;
+
+export { ACCOUNT_MENU_ID, PANEL_CLOSE_DURATION_MS };

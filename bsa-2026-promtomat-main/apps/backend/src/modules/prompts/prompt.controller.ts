@@ -1,0 +1,628 @@
+import { APIPath } from "~/libs/enums/enums.js";
+import { BaseController } from "~/libs/modules/controller/base-controller.module.js";
+import {
+	type APIHandlerOptions,
+	type APIHandlerResponse,
+} from "~/libs/modules/controller/controller.js";
+import { HTTPCode, HTTPMethod } from "~/libs/modules/http/http.js";
+import { type Logger } from "~/libs/modules/logger/logger.js";
+
+import { workspaceAccessHook } from "../workspaces/libs/hooks/workspace-access.hook.js";
+import { type WorkspaceService } from "../workspaces/workspace.service.js";
+import { PromptsApiPath } from "./libs/enums/enums.js";
+import { promptAccessHook } from "./libs/hooks/prompt-access.hook.js";
+import {
+	type PromptCreateRequestDto,
+	type PromptIdParameterDto,
+	type PromptRouteParametersDto,
+	type PromptStreakQueryDto,
+	type PromptUpdateBodyRequestDto,
+	type PromptUpdateIntentRequestDto,
+	type PromptWorkspaceQueryDto,
+} from "./libs/types/types.js";
+import {
+	promptCreateValidationSchema,
+	promptIdParameterValidationSchema,
+	promptRouteParametersValidationSchema,
+	promptStreakQueryValidationSchema,
+	promptUpdateBodyValidationSchema,
+	promptUpdateIntentValidationSchema,
+	promptWorkspaceQueryValidationSchema,
+} from "./libs/validation-schemas/validation-schemas.js";
+import { type PromptService } from "./prompt.service.js";
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         errorType:
+ *           type: string
+ *         message:
+ *           type: string
+ *     ValidationErrorResponse:
+ *       type: object
+ *       properties:
+ *         details:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               message:
+ *                 type: string
+ *               path:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *         errorType:
+ *           type: string
+ *         message:
+ *           type: string
+ *     Prompt:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: number
+ *           minimum: 1
+ *         label:
+ *           type: string
+ *         efficiencyScore:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 10
+ *           nullable: true
+ *         promptBody:
+ *           type: string
+ *         taskIntent:
+ *           type: string
+ *         userId:
+ *           type: number
+ *         workspaceId:
+ *           type: number
+ *     PromptItem:
+ *       type: object
+ *       properties:
+ *         body:
+ *           type: string
+ *         createdAt:
+ *           type: string
+ *         id:
+ *           type: number
+ *         intent:
+ *           type: string
+ *         score:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 10
+ *           nullable: true
+ *         workspaceId:
+ *           type: number
+ *         workspaceName:
+ *           type: string
+ *     PromptRecent:
+ *       type: object
+ *       properties:
+ *         efficiencyScore:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 10
+ *           nullable: true
+ *         id:
+ *           type: number
+ *           minimum: 1
+ *         taskIntent:
+ *           type: string
+ *     PromptStreak:
+ *       type: object
+ *       properties:
+ *         currentStreak:
+ *           type: number
+ *         days:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               date:
+ *                 type: string
+ *               promptCount:
+ *                 type: number
+ */
+class PromptController extends BaseController {
+	private promptService: PromptService;
+	private workspaceService: WorkspaceService;
+
+	public constructor(
+		logger: Logger,
+		promptService: PromptService,
+		workspaceService: WorkspaceService,
+	) {
+		super(logger, APIPath.PROMPTS);
+
+		this.promptService = promptService;
+		this.workspaceService = workspaceService;
+
+		this.addRoute({
+			handler: (options) =>
+				this.findRecent(
+					options as APIHandlerOptions<{
+						query: PromptWorkspaceQueryDto;
+					}>,
+				),
+			method: HTTPMethod.GET,
+			path: PromptsApiPath.RECENT,
+			preHandler: workspaceAccessHook(this.workspaceService),
+			validation: {
+				query: promptWorkspaceQueryValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.findStreak(
+					options as APIHandlerOptions<{
+						query: PromptStreakQueryDto;
+					}>,
+				),
+			method: HTTPMethod.GET,
+			path: PromptsApiPath.STREAK,
+			validation: {
+				query: promptStreakQueryValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.create(
+					options as APIHandlerOptions<{
+						body: PromptCreateRequestDto;
+					}>,
+				),
+			method: HTTPMethod.POST,
+			path: PromptsApiPath.ROOT,
+			preHandler: workspaceAccessHook(this.workspaceService),
+			validation: {
+				body: promptCreateValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.findById(
+					options as APIHandlerOptions<{
+						params: PromptIdParameterDto;
+					}>,
+				),
+			method: HTTPMethod.GET,
+			path: PromptsApiPath.$ID,
+			validation: {
+				params: promptIdParameterValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.updateBody(
+					options as APIHandlerOptions<{
+						body: PromptUpdateBodyRequestDto;
+						params: PromptRouteParametersDto;
+					}>,
+				),
+			method: HTTPMethod.PATCH,
+			path: PromptsApiPath.$PROMPT_ID_BODY,
+			preHandler: promptAccessHook(this.promptService),
+			validation: {
+				body: promptUpdateBodyValidationSchema,
+				params: promptRouteParametersValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.updateIntent(
+					options as APIHandlerOptions<{
+						body: PromptUpdateIntentRequestDto;
+						params: PromptRouteParametersDto;
+					}>,
+				),
+			method: HTTPMethod.PATCH,
+			path: PromptsApiPath.$PROMPT_ID_INTENT,
+			preHandler: promptAccessHook(this.promptService),
+			validation: {
+				body: promptUpdateIntentValidationSchema,
+				params: promptRouteParametersValidationSchema,
+			},
+		});
+	}
+
+	/**
+	 * @swagger
+	 * /prompts:
+	 *   post:
+	 *     description: Creates a new prompt
+	 *     security:
+	 *       - bearerAuth: []
+	 *     requestBody:
+	 *       description: Prompt data
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               efficiencyScore:
+	 *                 type: number
+	 *                 minimum: 1
+	 *                 maximum: 10
+	 *               promptBody:
+	 *                 type: string
+	 *               taskIntent:
+	 *                 type: string
+	 *               workspaceId:
+	 *                 type: number
+	 *     responses:
+	 *       201:
+	 *         description: Successful operation
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Prompt"
+	 *       401:
+	 *         description: Unauthorized
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       403:
+	 *         description: You do not have permission to access this workspace
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       404:
+	 *         description: Workspace not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       422:
+	 *         description: Validation failed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationErrorResponse"
+	 */
+	private async create(
+		options: APIHandlerOptions<{ body: PromptCreateRequestDto }>,
+	): Promise<APIHandlerResponse> {
+		const payload = {
+			...options.body,
+			userId: options.user?.id as number,
+		};
+		return {
+			payload: await this.promptService.create(payload),
+			status: HTTPCode.CREATED,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /prompts/{id}:
+	 *   get:
+	 *     description: Returns a prompt of a workspace the caller may read
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: number
+	 *           minimum: 1
+	 *     responses:
+	 *       200:
+	 *         description: Successful operation
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/PromptItem"
+	 *       401:
+	 *         description: Unauthorized
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       404:
+	 *         description: Prompt not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       422:
+	 *         description: Validation failed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationError"
+	 */
+	private async findById(
+		options: APIHandlerOptions<{ params: PromptIdParameterDto }>,
+	): Promise<APIHandlerResponse> {
+		return {
+			payload: await this.promptService.findById(
+				options.params.id,
+				options.user?.id as number,
+			),
+			status: HTTPCode.OK,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /prompts/recent:
+	 *   get:
+	 *     description: Returns the most recent recorded prompts for a workspace
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: workspaceId
+	 *         required: true
+	 *         schema:
+	 *           type: number
+	 *           minimum: 1
+	 *         description: Workspace to list recent prompts from
+	 *     responses:
+	 *       200:
+	 *         description: Successful operation
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/PromptRecent"
+	 *       401:
+	 *         description: Unauthorized
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       404:
+	 *         description: Workspace not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       422:
+	 *         description: Validation failed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationErrorResponse"
+	 */
+	private async findRecent(
+		options: APIHandlerOptions<{ query: PromptWorkspaceQueryDto }>,
+	): Promise<APIHandlerResponse> {
+		return {
+			payload: await this.promptService.findRecent(options.query.workspaceId),
+			status: HTTPCode.OK,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /prompts/streak:
+	 *   get:
+	 *     description: Returns the current logging streak and recent day activity for the authenticated user
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: timeZone
+	 *         required: false
+	 *         schema:
+	 *           type: string
+	 *         description: IANA time zone used to group prompts into local days, defaulting to UTC
+	 *     responses:
+	 *       200:
+	 *         description: Successful operation
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/PromptStreak"
+	 *       401:
+	 *         description: Unauthorized
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       422:
+	 *         description: Validation failed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationErrorResponse"
+	 */
+	private async findStreak(
+		options: APIHandlerOptions<{ query: PromptStreakQueryDto }>,
+	): Promise<APIHandlerResponse> {
+		return {
+			payload: await this.promptService.findStreak(
+				options.user?.id as number,
+				options.query.timeZone,
+			),
+			status: HTTPCode.OK,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /prompts/{promptId}/body:
+	 *   patch:
+	 *     description: Updates the stored body of a prompt the caller owns
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: promptId
+	 *         required: true
+	 *         schema:
+	 *           type: integer
+	 *           minimum: 1
+	 *     requestBody:
+	 *       description: New prompt body
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               promptBody:
+	 *                 type: string
+	 *                 minLength: 1
+	 *                 maxLength: 50000
+	 *     responses:
+	 *       200:
+	 *         description: Successful operation
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Prompt"
+	 *       401:
+	 *         description: Unauthorized
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       404:
+	 *         description: Prompt not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 *       422:
+	 *         description: Validation failed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationErrorResponse"
+	 *       503:
+	 *         description: Derived data could not be regenerated
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ErrorResponse"
+	 */
+	private async updateBody(
+		options: APIHandlerOptions<{
+			body: PromptUpdateBodyRequestDto;
+			params: PromptRouteParametersDto;
+		}>,
+	): Promise<APIHandlerResponse> {
+		const payload = {
+			...options.body,
+			id: options.params.promptId,
+		};
+
+		return {
+			payload: await this.promptService.updateBody(payload),
+			status: HTTPCode.OK,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /prompts/{promptId}/intent:
+	 *   patch:
+	 *     description: Updates the intent of a prompt
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: promptId
+	 *         required: true
+	 *         schema:
+	 *           type: integer
+	 *           minimum: 1
+	 *     requestBody:
+	 *       description: New prompt intent
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               taskIntent:
+	 *                 type: string
+	 *                 minLength: 5
+	 *                 maxLength: 255
+	 *     responses:
+	 *       200:
+	 *         description: Successful operation
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Prompt"
+	 *       401:
+	 *         description: Unauthorized
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 errorType:
+	 *                   type: string
+	 *                 message:
+	 *                   type: string
+	 *       404:
+	 *         description: Prompt not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 errorType:
+	 *                   type: string
+	 *                 message:
+	 *                   type: string
+	 *       422:
+	 *         description: Validation failed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               type: object
+	 *               properties:
+	 *                 details:
+	 *                   type: array
+	 *                   items:
+	 *                     type: object
+	 *                     properties:
+	 *                       message:
+	 *                         type: string
+	 *                       path:
+	 *                         type: array
+	 *                         items:
+	 *                           type: string
+	 *                 errorType:
+	 *                   type: string
+	 *                 message:
+	 *                   type: string
+	 */
+	private async updateIntent(
+		options: APIHandlerOptions<{
+			body: PromptUpdateIntentRequestDto;
+			params: PromptRouteParametersDto;
+		}>,
+	): Promise<APIHandlerResponse> {
+		const payload = {
+			...options.body,
+			id: options.params.promptId,
+		};
+
+		return {
+			payload: await this.promptService.updateIntent(payload),
+			status: HTTPCode.OK,
+		};
+	}
+}
+
+export { PromptController };

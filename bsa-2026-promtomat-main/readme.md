@@ -1,0 +1,348 @@
+# Intelligent Prompt search
+
+Improve and evaluate prompt generation for specific tasks
+
+## 1. Introduction
+
+### 1.1 Useful Links
+
+- Pay attention, that we have certain [quality criteria](https://github.com/BinaryStudioAcademy/quality-criteria/blob/production/src/javascript.md), which we should follow during application development.
+
+TODO: Add development deployment link
+
+## 2. Domain
+
+Promptomat is an intelligent prompt search, evaluation, and autocomplete system for AI coding tools.
+
+## 3. Requirements
+
+- [NodeJS](https://nodejs.org/en) (24.x.x);
+- [pnpm](https://pnpm.io/) (11.x.x);
+- [PostgreSQL](https://www.postgresql.org/) (18.x) with [pgvector](https://github.com/pgvector/pgvector)
+
+Supported development systems:
+
+- Windows 11 (PowerShell or WSL2)
+- macOS
+- Linux
+
+The pnpm version is pinned in the `packageManager` field, so `corepack enable pnpm` is enough to get the exact version
+the project expects.
+
+## 4. Database Schema
+
+`id`, `created_at` and `updated_at` come from the shared `Abstract` model
+(`apps/backend/src/libs/modules/database/abstract.model.ts`), rather than being specific to `users`. The `migrations`
+table is knex's own bookkeeping table, not application data, so it is excluded below.
+
+The diagram reflects the schema produced by the migrations in `apps/backend/src/db/migrations`. The `vector` type of
+`prompt_embeddings.embedding` comes from the [pgvector](https://github.com/pgvector/pgvector) extension, which the
+migrations enable.
+
+```mermaid
+erDiagram
+    users ||--o{ prompts : "user_id"
+    workspaces ||--o{ prompts : "workspace_id"
+    labels |o--o{ prompts : "label_id"
+    users ||--o{ workspaces : "user_id"
+    prompts ||--o| prompt_embeddings : "prompt_id"
+    workspaces ||--o{ composed_prompts : "workspace_id"
+    users ||--o{ composed_prompts : "requester_id"
+    composed_prompts ||--o{ composed_prompt_sources : "composed_prompt_id"
+    prompts ||--o{ composed_prompt_sources : "prompt_id"
+    users ||--o{ evaluations : "user_id"
+    prompts ||--o{ evaluations : "prompt_id"
+    composed_prompts ||--o{ evaluations : "composed_prompt_id"
+    workspaces ||--o{ repository_bindings : "workspace_id"
+
+    users {
+        int id PK "auto-increment"
+        varchar email UK "not null"
+        text password_hash "not null"
+        text password_salt "not null"
+        varchar nickname UK "not null, max 25"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+    workspaces {
+        int id PK "auto-increment"
+        int user_id FK "not null, onDelete CASCADE, unique with name"
+        varchar name "not null, unique with user_id"
+        varchar description "not null, default ''"
+        smallint dataset_target "not null, default 1000, check(>= 1)"
+        text[] stack_tags "not null, default {}"
+        varchar visibility "not null, default 'private'"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+    labels {
+        int id PK "auto-increment"
+        varchar name "not null, unique per workspace"
+        int workspace_id FK "not null, onDelete CASCADE"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+    prompts {
+        int id PK "auto-increment"
+        int user_id FK "not null, onDelete CASCADE"
+        int workspace_id FK "not null, onDelete CASCADE"
+        int label_id FK "nullable, indexed, onDelete SET NULL"
+        varchar task_intent "not null"
+        text prompt_body "not null"
+        int efficiency_score "not null, check(1-10)"
+        decimal computed_score "nullable, check(1-10)"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+    prompt_embeddings {
+        int id PK "auto-increment"
+        int prompt_id FK "not null, unique, onDelete CASCADE"
+        vector embedding "not null, vector(1024)"
+        varchar model_id "not null"
+        varchar source_hash "not null, sha256 of the embedded text"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+    composed_prompts {
+        int id PK "auto-increment"
+        int workspace_id FK "not null, onDelete CASCADE, indexed with description_hash"
+        int requester_id FK "not null, references users, onDelete CASCADE"
+        text description "not null"
+        varchar description_hash "not null, varchar(64), sha256 of the normalized description, indexed with workspace_id"
+        text body "not null"
+        text explanation "not null"
+        varchar model_id "not null"
+        decimal computed_score "nullable, check(1-10)"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+    composed_prompt_sources {
+        int id PK "auto-increment"
+        int composed_prompt_id FK "not null, onDelete CASCADE, unique with prompt_id"
+        int prompt_id FK "not null, onDelete CASCADE, unique with composed_prompt_id"
+        int rank "not null, check(>= 1), number the source had in the composition request"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+   evaluations {
+        int id PK "auto-increment"
+        int user_id FK "not null, onDelete CASCADE"
+        int prompt_id FK "nullable, onDelete CASCADE, exclusive with composed_prompt_id, unique with user_id"
+        int composed_prompt_id FK "nullable, onDelete CASCADE, exclusive with prompt_id, unique with user_id"
+        int score "not null, check(1-10)"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+
+    repository_bindings {
+        int id PK "auto-increment"
+        int workspace_id FK "not null, onDelete CASCADE, unique with host+owner+repo"
+        varchar host "not null"
+        varchar owner "not null"
+        varchar repo "not null"
+        datetime created_at "not null, defaults to now()"
+        datetime updated_at "not null, defaults to now()"
+    }
+```
+
+## 5. Architecture
+
+![Infrastructure diagram](docs/infra-diagram.png)
+
+TODO: add application schema
+
+### 5.1 Global
+
+#### 5.1.1 Technologies
+
+1. [Typescript](https://www.typescriptlang.org/)
+2. [pnpm workspaces](https://pnpm.io/workspaces)
+
+### 5.2 Frontend
+
+#### 5.2.1 Technologies
+
+1. [React](https://react.dev/) — a frontend library
+2. [Redux](https://redux.js.org/) + [Redux Toolkit](https://redux-toolkit.js.org/) — a state manager
+3. [RTK Query](https://redux-toolkit.js.org/rtk-query/overview) — server state (fetching, caching, invalidation)
+
+#### 5.2.2 Folder Structure
+
+1. assets - static assets (images, global styles)
+2. libs - shared libraries and utilities
+
+   2.1 components - plain react components
+
+   2.2 enums
+
+   2.3 helpers
+
+   2.4 hooks
+
+   2.5 modules - separate features or functionalities
+
+   2.6 types
+
+3. modules - separate app features or functionalities
+4. pages - app pages
+
+### 5.3 Backend
+
+#### 5.3.1 Technologies
+
+1. [Fastify](https://fastify.dev/) — a backend framework
+2. [Knex](https://knexjs.org/) — a query builder
+3. [Objection](https://vincit.github.io/objection.js/) — an ORM
+
+#### 5.3.2 Folder Structure
+
+1. db - database data (migrations, seeds)
+2. libs - shared libraries and utilities
+
+   2.1 enums
+
+   2.2 exceptions
+
+   2.3 helpers
+
+   2.4 modules - separate features or functionalities
+
+   2.5 types
+
+3. modules - separate app features or functionalities
+
+4. scripts - manually run maintenance entry points (`embeddings:backfill:dev`)
+
+### 5.4 Shared Package
+
+#### 5.4.1 Reason
+
+As we are already using js on both frontend and backend it would be useful to share some contracts and code between them.
+
+#### 5.4.2 Technologies
+
+1. [Zod](https://github.com/colinhacks/zod) — a schema validator
+
+### 5.5 MCP Server
+
+#### 5.5.1 Reason
+
+A coding agent needs Promptomat where the developer works, not in a browser tab. `apps/mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io/) server: the agent starts it on the developer's machine, talks to it over stdio, and the server talks to the backend API as the user whose API token it holds.
+
+It is installed on the user's machine from a release tarball rather than run from this repository, so it has no part in "How to Run". Installation, connection, troubleshooting and the release procedure are in the [package readme](apps/mcp/readme.md).
+
+#### 5.5.2 Technologies
+
+1. [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) — the protocol server and the stdio transport
+2. [esbuild](https://esbuild.github.io/) — bundles the server and the shared package into one file
+
+## 6. How to Run
+
+### 6.1 Manually
+
+1. Create and fill all .env files. These files are:
+
+- apps/frontend/.env
+- apps/backend/.env
+
+You should use .env.example files as a reference.
+
+1. Install dependencies: `pnpm install`. Git hooks are installed as part of it, they are used to verify code style on
+   commit.
+
+2. Run database (PostgreSQL). The migrations enable the [pgvector](https://github.com/pgvector/pgvector) extension, so it has to be available to the server before step 3; `migrate:dev` then runs `CREATE EXTENSION` itself and no manual SQL is needed. Choose one option:
+
+   Option A: Docker Compose
+
+   Prerequisites: Docker Desktop (Windows/macOS) or Docker Engine with the Compose plugin (Linux). The compose file in `apps/backend` starts `pgvector/pgvector:pg18` with the `DB_*` values from `apps/backend/.env`:
+
+   - Start: `pnpm db:up`
+   - Stop: `pnpm db:down`
+
+   Option B: native PostgreSQL install
+
+   Install PostgreSQL 18.x, create a database and credentials matching `apps/backend/.env` (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`), and make pgvector available:
+
+   - Homebrew: `brew install pgvector`, then restart the postgresql service.
+   - Postgres.app ships pgvector; nothing to do.
+   - Other installations: follow the [pgvector installation notes](https://github.com/pgvector/pgvector#installation).
+
+   If you already have a database from before pgvector was required, only the extension is missing. For a native installation, install it as above; the data stays. A Docker container from the plain `postgres` image has to be replaced: remove it with `docker rm -f <container-name>` and run `pnpm db:up`. The compose volume starts empty, so the migrations rebuild the schema and local data is lost.
+
+3. Apply migrations: `pnpm --filter @promptomat/backend migrate:dev`
+
+4. Run backend: `pnpm --filter @promptomat/backend start:dev`
+
+   The backend repairs its embedded prompt index — prompts with no Embedding, changed text, or a changed embedding model — by itself every night at 03:00 UTC (skipped while the model is not ready). To run the same pass by hand, use `pnpm --filter @promptomat/backend embeddings:backfill:dev`; it is idempotent and reports how many prompts it embedded, skipped, and failed.
+
+5. Run frontend: `pnpm --filter @promptomat/frontend start:dev`
+
+Note that pnpm uses --filter <package-name> to target a single workspace, while -w is a shorthand for
+--workspace-root and runs the script of the root package.json.
+
+### 6.2 Worktrees
+
+`git worktree add` checks out tracked files only, so a new worktree starts without the `.env` files and without
+`node_modules`. Both are handled automatically:
+
+- a `post-checkout` hook copies the gitignored env files from the main working tree, and only when the checkout creates
+  a new working tree;
+- the first `pnpm` script installs the dependencies, because `verifyDepsBeforeRun` is enabled. Packages are hardlinked
+  from the global pnpm store, so nothing is downloaded again.
+
+The hook is installed by `pnpm install` together with the other git hooks, and lives in
+`scripts/git-hook-post-checkout.sh`.
+
+The env files are copied as they are, so every worktree shares one database and one backend port. Branches that add
+migrations therefore diverge from the shared schema, and two backends cannot run at once. Point a worktree at its own
+database and port by editing its copied `.env` when that becomes a problem.
+
+## 7. Development Flow
+
+### 7.1 Pull Request Flow
+
+```
+<type>: <ticket-title> <project-prefix>-<issue-number>
+```
+
+For the full list of types check [Conventional Commits](https://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional)
+
+Examples:
+
+- `feat: add dashboard screen pm-123`
+
+### 7.2 Branch Flow
+
+```
+<issue-number>-<type>-<short-desc>
+```
+
+Examples:
+
+- `123-feat-add-dashboard`
+- `12-feat-add-user-flow`
+- `34-fix-user-flow`
+
+### 7.3 Commit Flow
+
+We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0) to handle commit messages
+
+```
+<type>: <description> <project-prefix>-<issue-number>
+```
+
+Examples:
+
+- `feat: add dashboard component pm-45`
+- `fix: update dashboard card size pm-212`
+
+## 8. Deployment
+
+CI/CD implemented using [GitHub Actions](https://docs.github.com/en/actions)

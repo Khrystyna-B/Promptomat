@@ -1,0 +1,127 @@
+.modal-layer {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.modal-backdrop {
+	position: absolute;
+	inset: 0;
+	padding: 0;
+	pointer-events: auto;
+	background-color: var(--overlay-scrim);
+	border: 0;
+}
+
+.modal-layer .modal-backdrop {
+	display: block;
+	height: auto;
+	overflow: hidden;
+	font-size: 0;
+	line-height: 0;
+	color: transparent;
+	white-space: normal;
+	cursor: default;
+	outline: none;
+	background-color: var(--overlay-scrim);
+	border: 0;
+	border-radius: 0;
+	transition: none;
+}
+
+.modal-layer .modal-backdrop:hover:not(:disabled),
+.modal-layer .modal-backdrop:active:not(:disabled) {
+	background-color: var(--overlay-scrim);
+}
+
+.modal-backdrop-static {
+	cursor: default;
+}
+
+.modal {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 400px;
+	max-height: 90%;
+	color: var(--text-body);
+	pointer-events: auto;
+	background-color: var(--surface-card);
+	border: var(--border-width-hairline) solid var(--border-subtle);
+	border-radius: var(--radius-lg);
+}
+
+.modal-flat {
+	gap: var(--space-16);
+	padding: var(--space-24);
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+.modal-sectioned {
+	max-width: 520px;
+	overflow: hidden;
+}
+
+.modal-header {
+	display: flex;
+	gap: var(--space-8);
+	align-items: center;
+}
+
+.modal-header-sectioned {
+	gap: var(--space-10);
+	align-items: baseline;
+	padding: var(--space-20);
+	border-bottom: var(--border-width-hairline) solid var(--border-default);
+}
+
+.modal-title-icon {
+	color: var(--text-strong);
+}
+
+.modal-title {
+	min-width: 0;
+	margin: 0;
+	font-size: var(--font-size-body-xl);
+	font-weight: 600;
+	color: var(--text-strong);
+	overflow-wrap: anywhere;
+}
+
+.modal-title-danger {
+	color: var(--fg-danger);
+}
+
+.modal-title-stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.modal-subtitle {
+	margin: 0;
+	font-size: var(--font-size-body-sm);
+	color: var(--text-muted);
+}
+
+.modal-body {
+	min-height: 0;
+	padding: var(--space-20);
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+.modal-footer {
+	display: flex;
+	gap: var(--space-8);
+	align-items: center;
+	justify-content: flex-end;
+	padding: var(--space-20);
+	border-top: var(--border-width-hairline) solid var(--border-default);
+}

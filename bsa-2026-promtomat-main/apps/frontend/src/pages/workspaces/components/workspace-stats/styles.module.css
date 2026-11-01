@@ -1,0 +1,13 @@
+.stats {
+	margin: 0 0 var(--space-20);
+}
+
+.accent {
+	color: var(--text-accent);
+}
+
+@container (width <= 640px) {
+	.stats {
+		margin-bottom: var(--space-16);
+	}
+}

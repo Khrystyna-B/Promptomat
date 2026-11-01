@@ -1,0 +1,53 @@
+import { type preHandlerAsyncHookHandler } from "fastify";
+
+import { AuthError, WorkspaceError } from "~/libs/exceptions/exceptions.js";
+
+import { type WorkspaceService } from "../../workspace.service.js";
+
+const workspaceAccessHook = (
+	workspaceService: WorkspaceService,
+	options: { isWorkspaceOptional?: boolean } = {},
+): preHandlerAsyncHookHandler => {
+	return async (request) => {
+		if (!request.user) {
+			throw AuthError.unauthorized();
+		}
+
+		const routeParameters = request.params as { workspaceId?: number };
+		const requestBody = request.body as undefined | { workspaceId?: number };
+		const requestQuery = request.query as undefined | { workspaceId?: number };
+		const workspaceId =
+			routeParameters.workspaceId ??
+			requestBody?.workspaceId ??
+			requestQuery?.workspaceId;
+
+		if (!workspaceId) {
+			if (options.isWorkspaceOptional) {
+				return;
+			}
+			throw WorkspaceError.notFound();
+		}
+
+		const ownedWorkspace = await workspaceService.findByIdAndOwner(
+			workspaceId,
+			request.user.id,
+		);
+
+		if (ownedWorkspace) {
+			return;
+		}
+
+		const contributedWorkspace = await workspaceService.findByIdAndContributor(
+			workspaceId,
+			request.user.id,
+		);
+
+		if (contributedWorkspace) {
+			return;
+		}
+
+		throw WorkspaceError.notFound();
+	};
+};
+
+export { workspaceAccessHook };

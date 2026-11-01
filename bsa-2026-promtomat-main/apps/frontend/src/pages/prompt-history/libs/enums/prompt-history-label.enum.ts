@@ -1,0 +1,37 @@
+const PromptHistoryLabel = {
+	ANY_SCORE: "Any score",
+	AVERAGE_SCORE: "Average score",
+	CLEAR: "Clear",
+	DESCRIPTION: "Search by the task, then narrow it by score.",
+	EFFICIENCY_SCORE: "Efficiency score",
+	EMPTY_FILTERS: "No prompts match the current filters.",
+	EMPTY_NO_WORKSPACES: "Create a workspace to browse prompts.",
+	EMPTY_SELECTION: "Select a result to read the full prompt.",
+	EMPTY_WORKSPACE: "No prompts in this workspace yet.",
+	EYEBROW: "Retrieval",
+	HINT_BROWSE: "Showing this workspace's prompt history.",
+	HINT_SEARCH:
+		"Match describes relevance; quality reflects the recorded outcome.",
+	LOAD_ERROR: "Failed to load prompts. Please try again.",
+	LOAD_MORE: "Load More",
+	LOADING: "Loading...",
+	METRICS: "Prompt history metrics",
+	PROMPTS_LOGGED: "Prompts logged",
+	PROMPTS_LOGGED_CAPTION: "total",
+	QUALITY_TIER: "Quality Tier",
+	QUALITY_TIER_ALL: "Any quality",
+	QUALITY_TIER_HIGH: "High (8-10)",
+	QUALITY_TIER_LOW: "Low (1-3)",
+	QUALITY_TIER_MID: "Mid (4-7)",
+	QUALITY_TIER_UNRATED: "Unrated",
+	RESULT: "result",
+	RESULTS: "results",
+	RETRY: "Retry",
+	SEARCH: "Describe the task",
+	SEARCH_PLACEHOLDER:
+		"Describe the task: “rate limit middleware”, “stripe webhook”…",
+	SUBTITLE: "Find the prompt that already worked",
+	WORKSPACE: "Workspace",
+} as const;
+
+export { PromptHistoryLabel };

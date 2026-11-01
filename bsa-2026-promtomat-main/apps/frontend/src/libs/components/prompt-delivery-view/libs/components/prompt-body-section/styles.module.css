@@ -1,0 +1,10 @@
+.prompt-body {
+	padding: var(--space-16);
+	overflow-x: auto;
+	font-size: var(--font-size-body-base);
+	color: var(--text-body);
+	overflow-wrap: break-word;
+	background-color: var(--surface-sunken);
+	border: var(--border-width-hairline) solid var(--border-subtle);
+	border-radius: var(--radius-md);
+}

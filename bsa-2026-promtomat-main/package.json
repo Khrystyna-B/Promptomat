@@ -1,0 +1,63 @@
+{
+	"name": "promptomat",
+	"version": "1.0.0",
+	"type": "module",
+	"packageManager": "pnpm@11.13.1",
+	"engines": {
+		"node": "24.x.x",
+		"pnpm": "11.x.x"
+	},
+	"scripts": {
+		"git:hook:precommit": "lint-staged",
+		"git:hook:commit": "pnpm exec commitlint --edit",
+		"db:up": "pnpm --filter @promptomat/backend run db:up",
+		"db:down": "pnpm --filter @promptomat/backend run db:down",
+		"build:shared": "pnpm --filter @promptomat/shared run build",
+		"build:frontend": "pnpm --filter @promptomat/frontend run build",
+		"build:backend": "pnpm --filter @promptomat/backend run build",
+		"build": "pnpm --recursive run build",
+		"lint:editor": "editorconfig-checker -exclude ^design/",
+		"lint:fs": "ls-lint",
+		"lint:type": "tsc --noEmit",
+		"lint:js": "eslint . --max-warnings=0 --no-warn-ignored",
+		"lint:format": "prettier --check \"**/*.{ts,tsx,json,md,css,html}\"",
+		"lint:trash": "knip",
+		"format": "prettier --write \"**/*.{ts,tsx,json,md,css,html}\"",
+		"lint": "concurrently \"pnpm:lint:*\" && pnpm --recursive run lint",
+		"ci:prepare": "simple-git-hooks"
+	},
+	"devDependencies": {
+		"@commitlint/cli": "21.2.1",
+		"@commitlint/config-conventional": "21.2.0",
+		"@commitlint/types": "21.2.0",
+		"@eslint/js": "10.0.1",
+		"@ls-lint/ls-lint": "2.3.1",
+		"@typescript-eslint/eslint-plugin": "8.65.0",
+		"@typescript-eslint/parser": "8.65.0",
+		"concurrently": "10.0.4",
+		"danger": "13.0.10",
+		"editorconfig-checker": "7.0.0",
+		"eslint": "10.8.0",
+		"eslint-import-resolver-typescript": "4.4.5",
+		"eslint-plugin-import-x": "4.17.1",
+		"eslint-plugin-jsdoc": "63.3.2",
+		"eslint-plugin-perfectionist": "5.10.0",
+		"eslint-plugin-sonarjs": "4.2.0",
+		"eslint-plugin-unicorn": "72.0.0",
+		"globals": "17.8.0",
+		"knip": "6.31.0",
+		"lint-staged": "17.3.0",
+		"prettier": "3.9.6",
+		"simple-git-hooks": "2.13.1",
+		"stylelint": "17.14.1",
+		"stylelint-config-recess-order": "7.7.0",
+		"stylelint-config-standard": "40.0.0",
+		"tsc-alias": "1.9.1",
+		"typescript": "6.0.3"
+	},
+	"simple-git-hooks": {
+		"pre-commit": "pnpm run lint:type && pnpm run git:hook:precommit",
+		"commit-msg": "pnpm run git:hook:commit",
+		"post-checkout": "script=\"$(git rev-parse --git-common-dir)/../scripts/git-hook-post-checkout.sh\"; if [ -f \"$script\" ]; then sh \"$script\" \"$@\"; fi"
+	}
+}

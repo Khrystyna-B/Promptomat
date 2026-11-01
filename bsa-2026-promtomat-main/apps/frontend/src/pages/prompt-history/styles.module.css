@@ -1,0 +1,138 @@
+.empty-selection {
+	padding: var(--space-32);
+	color: var(--text-muted);
+	text-align: center;
+	background-color: var(--surface-sunken);
+	border: var(--border-width-hairline) dashed var(--border-subtle);
+	border-radius: var(--radius-xl);
+}
+
+.page-wrapper {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-20);
+	width: 100%;
+}
+
+.intro {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-16);
+}
+
+.workspace {
+	width: 100%;
+}
+
+.accent {
+	color: var(--text-accent);
+}
+
+.filters {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-10);
+}
+
+.search {
+	flex: 1;
+	min-width: 0;
+}
+
+.score-filter {
+	width: 100%;
+}
+
+.results-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-12);
+	align-items: center;
+	padding: var(--space-12) var(--space-14);
+	background-color: var(--surface-sunken);
+	border: var(--border-width-hairline) solid var(--border-subtle);
+	border-radius: var(--radius-lg);
+}
+
+.result-count {
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-body-sm);
+	color: var(--text-strong);
+}
+
+.result-hint {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--font-size-body-sm);
+	color: var(--text-muted);
+}
+
+@media (width < 480px) {
+	.results-bar {
+		justify-content: space-between;
+	}
+
+	.result-hint {
+		flex-basis: 100%;
+		order: 1;
+	}
+}
+
+.search-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--space-16);
+	align-items: start;
+}
+
+.results {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-10);
+}
+
+.desktop-detail {
+	display: none;
+}
+
+.load-more-wrapper {
+	display: flex;
+	justify-content: center;
+	padding-top: var(--space-8);
+}
+
+@media (width >= 768px) {
+	.intro {
+		flex-direction: row;
+		align-items: flex-start;
+		justify-content: space-between;
+	}
+
+	.workspace {
+		max-width: 300px;
+	}
+
+	.filters {
+		flex-direction: row;
+		align-items: flex-start;
+	}
+
+	.score-filter {
+		flex: 0 0 210px;
+	}
+
+	.search-layout {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+		gap: var(--space-18);
+	}
+
+	.search-layout-empty {
+		grid-template-columns: 1fr;
+	}
+
+	.desktop-detail {
+		position: sticky;
+		top: calc(var(--layout-header-height) + var(--space-12));
+		display: block;
+	}
+}

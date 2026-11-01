@@ -1,0 +1,360 @@
+import { raw, type Transaction } from "objection";
+
+import { ZERO_VALUE } from "~/libs/constants/constants.js";
+import { QueryClearTarget, SortOrder, SQLAlias } from "~/libs/enums/enums.js";
+import { DatabaseTableName } from "~/libs/modules/database/database.js";
+import { LabelColumnName } from "~/modules/labels/libs/enums/enums.js";
+import {
+	FIRST_PAGE,
+	LABEL_ALIAS,
+	LABEL_ID,
+	PROMPT_ID,
+	PROMPT_LABEL_ID,
+	PROMPT_WORKSPACE_ID,
+	STREAK_DATE_FORMAT,
+} from "~/modules/prompts/libs/constants/constants.js";
+import {
+	PromptColumnName,
+	PromptProgress,
+} from "~/modules/prompts/libs/enums/enums.js";
+import { PromptEntity } from "~/modules/prompts/prompt.entity.js";
+import { type PromptModel } from "~/modules/prompts/prompt.model.js";
+import { WorkspaceColumnName } from "~/modules/workspaces/libs/enums/enums.js";
+
+import {
+	type PromptAggregateResult,
+	type PromptDto,
+	type PromptFindByWorkspacePayload,
+	type PromptItemResponseDto,
+	type PromptRawKnexRow,
+	type PromptRecentDto,
+	type PromptStreakDayDto,
+	type PromptUpdatePayload,
+	type PromptWorkspaceRawRow,
+} from "./libs/types/types.js";
+
+class PromptRepository {
+	private promptModel: typeof PromptModel;
+
+	public constructor(promptModel: typeof PromptModel) {
+		this.promptModel = promptModel;
+	}
+
+	private async findAggregate(
+		baseQuery: ReturnType<typeof this.promptModel.query>,
+	): Promise<PromptAggregateResult> {
+		const [aggregation] = await baseQuery
+			.clone()
+			.clearSelect()
+			.clearOrder()
+			.clear(QueryClearTarget.LIMIT)
+			.clear(QueryClearTarget.OFFSET)
+			.count(
+				`${DatabaseTableName.PROMPTS}.${PromptColumnName.ID} as ${SQLAlias.COUNT}`,
+			)
+			.select(
+				raw("AVG(COALESCE(??, ??)) as ??", [
+					`${DatabaseTableName.PROMPTS}.${PromptColumnName.COMPUTED_SCORE}`,
+					`${DatabaseTableName.PROMPTS}.${PromptColumnName.EFFICIENCY_SCORE}`,
+					SQLAlias.AVERAGE_SCORE,
+				]),
+			)
+			.castTo<{ averageScore: null | string; count: string }[]>()
+			.execute();
+
+		return {
+			averageScore: aggregation?.averageScore
+				? Number(aggregation.averageScore)
+				: null,
+			totalCount: aggregation?.count ? Number(aggregation.count) : ZERO_VALUE,
+		};
+	}
+
+	private initializeEntity(model: PromptModel): PromptEntity {
+		return PromptEntity.initialize({
+			computedScore: model.computedScore === null ? null : model.computedScore,
+			createdAt: model.createdAt,
+			efficiencyScore: model.efficiencyScore,
+			id: model.id,
+			labelId: model.labelId as number,
+			myScore: model.myScore ?? null,
+			promptBody: model.promptBody,
+			taskIntent: model.taskIntent,
+			updatedAt: model.updatedAt,
+			userId: model.userId,
+			workspaceId: model.workspaceId,
+		});
+	}
+
+	public async create(
+		entity: PromptEntity,
+		trx?: Transaction,
+	): Promise<PromptEntity> {
+		const prompt = await this.promptModel
+			.query(trx)
+			.insert(entity.toNewObject())
+			.returning("*")
+			.execute();
+
+		return this.initializeEntity(prompt);
+	}
+
+	public async findActiveDaysByUserId(
+		userId: number,
+		timeZone: string,
+	): Promise<PromptStreakDayDto[]> {
+		const rows = await this.promptModel
+			.query()
+			.select(
+				raw("to_char((?? AT TIME ZONE ?)::date, ?) as ??", [
+					PromptColumnName.CREATED_AT,
+					timeZone,
+					STREAK_DATE_FORMAT,
+					SQLAlias.DATE,
+				]),
+				raw("count(*) as ??", [SQLAlias.PROMPT_COUNT]),
+			)
+			.where(PromptColumnName.USER_ID, userId)
+			.where(
+				raw(
+					"(?? AT TIME ZONE ?)::date > (now() AT TIME ZONE ?)::date - (?)::int",
+					[
+						PromptColumnName.CREATED_AT,
+						timeZone,
+						timeZone,
+						PromptProgress.ACTIVITY_WINDOW,
+					],
+				),
+			)
+			.groupBy(SQLAlias.DATE)
+			.orderBy(SQLAlias.DATE, SortOrder.DESC)
+			.castTo<{ date: string; promptCount: string }[]>()
+			.execute();
+
+		return rows.map((row) => ({
+			date: row.date,
+			promptCount: Number(row.promptCount),
+		}));
+	}
+
+	public async findById(
+		id: number,
+		userId?: number,
+	): Promise<null | PromptItemResponseDto> {
+		const knex = this.promptModel.knex();
+		const selectColumns = [
+			`${DatabaseTableName.PROMPTS}.${PromptColumnName.CREATED_AT}`,
+			`${DatabaseTableName.PROMPTS}.${PromptColumnName.EFFICIENCY_SCORE}`,
+			`${DatabaseTableName.PROMPTS}.${PromptColumnName.COMPUTED_SCORE}`,
+			PROMPT_ID,
+			`${DatabaseTableName.PROMPTS}.${PromptColumnName.PROMPT_BODY}`,
+			`${DatabaseTableName.PROMPTS}.${PromptColumnName.TASK_INTENT}`,
+			PROMPT_WORKSPACE_ID,
+			`${DatabaseTableName.PROMPTS}.${PromptColumnName.USER_ID}`,
+			`${DatabaseTableName.WORKSPACES}.${WorkspaceColumnName.NAME} as ${SQLAlias.WORKSPACE_NAME}`,
+		];
+
+		const query = knex
+			.select(selectColumns)
+			.from(DatabaseTableName.PROMPTS)
+			.innerJoin(
+				DatabaseTableName.WORKSPACES,
+				PROMPT_WORKSPACE_ID,
+				`${DatabaseTableName.WORKSPACES}.${WorkspaceColumnName.ID}`,
+			)
+			.where(PROMPT_ID, "=", id);
+
+		if (userId !== undefined) {
+			query.select(
+				knex.raw(
+					`(SELECT score FROM ${DatabaseTableName.EVALUATIONS} WHERE prompt_id = ${DatabaseTableName.PROMPTS}.id AND user_id = ? LIMIT 1) as "myScore"`,
+					[userId],
+				),
+			);
+		}
+
+		const row = (await query.first()) as
+			(PromptRawKnexRow & { myScore?: null | number }) | undefined;
+
+		if (!row) {
+			return null;
+		}
+
+		const computedScore =
+			row.computedScore === null ? null : Number(row.computedScore);
+
+		return {
+			body: row.promptBody,
+			computedScore,
+			createdAt: row.createdAt,
+			id: row.id,
+			intent: row.taskIntent,
+			myScore: row.myScore ?? null,
+			score: row.efficiencyScore,
+			userId: row.userId,
+			workspaceId: row.workspaceId,
+			workspaceName: row.workspaceName,
+		};
+	}
+
+	public async findByIdAndUserId(
+		id: number,
+		userId: number,
+	): Promise<null | PromptEntity> {
+		const prompt = await this.promptModel.query().findOne({ id, userId });
+
+		return prompt ? this.initializeEntity(prompt) : null;
+	}
+
+	public async findByIdForUpdate(
+		id: number,
+		trx: Transaction,
+	): Promise<null | PromptEntity> {
+		const prompt = await this.promptModel
+			.query(trx)
+			.findById(id)
+			.forUpdate()
+			.execute();
+
+		return prompt ? this.initializeEntity(prompt) : null;
+	}
+
+	public async findByWorkspace({
+		labelId,
+		page,
+		size,
+		workspaceId,
+	}: PromptFindByWorkspacePayload): Promise<PromptDto[]> {
+		const query = this.promptModel
+			.knex()
+			.select(
+				`${DatabaseTableName.PROMPTS}.${PromptColumnName.EFFICIENCY_SCORE}`,
+				`${DatabaseTableName.PROMPTS}.${PromptColumnName.COMPUTED_SCORE}`,
+				PROMPT_ID,
+				`${DatabaseTableName.LABELS}.${LabelColumnName.NAME} as ${LABEL_ALIAS}`,
+				`${DatabaseTableName.PROMPTS}.${PromptColumnName.PROMPT_BODY}`,
+				`${DatabaseTableName.PROMPTS}.${PromptColumnName.TASK_INTENT}`,
+				`${DatabaseTableName.PROMPTS}.${PromptColumnName.USER_ID}`,
+				PROMPT_WORKSPACE_ID,
+			)
+			.from(DatabaseTableName.PROMPTS)
+			.offset((page - FIRST_PAGE) * size)
+			.limit(size)
+			.innerJoin(DatabaseTableName.LABELS, PROMPT_LABEL_ID, LABEL_ID)
+			.where(PROMPT_WORKSPACE_ID, "=", workspaceId)
+			.orderBy(PROMPT_ID, "desc");
+
+		if (labelId !== undefined) {
+			query.where(PROMPT_LABEL_ID, "=", labelId);
+		}
+
+		const items = (await query) as PromptWorkspaceRawRow[];
+
+		return items.map((item) => ({
+			...item,
+			computedScore:
+				item.computedScore === null ? null : Number(item.computedScore),
+		}));
+	}
+
+	public async findCountByWorkspaceId(workspaceId: number): Promise<number> {
+		return await this.promptModel.query().where({ workspaceId }).resultSize();
+	}
+
+	public async findLabelNameByPromptId(id: number): Promise<null | string> {
+		const row = await this.promptModel
+			.knex()
+			.select<{ label: null | string }>(
+				`${DatabaseTableName.LABELS}.${LabelColumnName.NAME} as ${LABEL_ALIAS}`,
+			)
+			.from(DatabaseTableName.PROMPTS)
+			.leftJoin(DatabaseTableName.LABELS, PROMPT_LABEL_ID, LABEL_ID)
+			.where(PROMPT_ID, id)
+			.first();
+
+		return row?.label ?? null;
+	}
+
+	public async findPromptsWithoutLabels(
+		limit: number,
+		afterId: number,
+	): Promise<PromptEntity[]> {
+		const prompts = await this.promptModel
+			.query()
+			.limit(limit)
+			.whereNull(PromptColumnName.LABEL_ID)
+			.orderBy(PromptColumnName.ID)
+			.where(PromptColumnName.ID, ">", afterId)
+			.execute();
+
+		return prompts.map((prompt) => this.initializeEntity(prompt));
+	}
+
+	public async findRecentByWorkspaceId(
+		workspaceId: number,
+		limit: number,
+	): Promise<PromptRecentDto[]> {
+		return await this.promptModel
+			.query()
+			.select(
+				PromptColumnName.COMPUTED_SCORE,
+				PromptColumnName.EFFICIENCY_SCORE,
+				PromptColumnName.ID,
+				PromptColumnName.TASK_INTENT,
+			)
+			.where({ workspaceId })
+			.orderBy(PromptColumnName.CREATED_AT, SortOrder.DESC)
+			.limit(limit)
+			.execute();
+	}
+
+	public async findUserPromptSummary(
+		userId: number,
+	): Promise<PromptAggregateResult> {
+		const baseQuery = this.promptModel
+			.query()
+			.where(
+				`${DatabaseTableName.PROMPTS}.${PromptColumnName.USER_ID}`,
+				userId,
+			);
+
+		return await this.findAggregate(baseQuery);
+	}
+
+	public async findWorkspaceId(id: number): Promise<null | number> {
+		const prompt = await this.promptModel
+			.query()
+			.select(PromptColumnName.WORKSPACE_ID)
+			.findById(id)
+			.castTo<undefined | { workspaceId: number }>();
+
+		return prompt?.workspaceId ?? null;
+	}
+
+	public async update(
+		id: number,
+		payload: PromptUpdatePayload,
+		trx?: Transaction,
+	): Promise<null | PromptEntity> {
+		const prompt = await this.promptModel
+			.query(trx)
+			.patchAndFetchById(id, payload)
+			.castTo<PromptModel | undefined>();
+
+		return prompt ? this.initializeEntity(prompt) : null;
+	}
+
+	public async updateComputedScore(
+		id: number,
+		computedScore: null | number,
+		trx?: Transaction,
+	): Promise<void> {
+		await this.promptModel.query(trx).findById(id).patch({ computedScore });
+	}
+
+	public async updateLabel(promptId: number, labelId: number): Promise<void> {
+		await this.promptModel.query().findById(promptId).patch({ labelId });
+	}
+}
+
+export { PromptRepository };

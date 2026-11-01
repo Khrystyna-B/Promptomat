@@ -1,0 +1,110 @@
+.card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-8);
+	width: 100%;
+	padding: var(--space-16) var(--space-18);
+	text-align: left;
+	cursor: pointer;
+	background-color: var(--surface-card);
+	border: var(--border-width-hairline) solid var(--border-subtle);
+	border-radius: var(--radius-xl);
+}
+
+.card:hover {
+	border-color: var(--border-accent);
+}
+
+.card:focus-visible {
+	outline: var(--border-width-focus) solid var(--border-focus);
+	outline-offset: var(--border-width-focus);
+}
+
+.card-selected {
+	background-color: var(--surface-raised);
+	border-color: var(--border-accent);
+}
+
+.header {
+	display: flex;
+	gap: var(--space-12);
+	align-items: flex-start;
+}
+
+.intent {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--font-size-body-base);
+	font-weight: 600;
+	color: var(--text-strong);
+	overflow-wrap: break-word;
+}
+
+.snippet {
+	display: block;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-family: var(--font-family-mono);
+	font-size: var(--font-size-body-sm);
+	line-height: 1.5;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.meta {
+	display: flex;
+	gap: var(--space-10);
+	align-items: center;
+	font-size: var(--font-size-label-sm);
+	color: var(--text-muted);
+}
+
+.chevron {
+	flex-shrink: 0;
+	width: var(--space-16);
+	height: var(--space-16);
+	margin-top: var(--space-4);
+	color: var(--text-muted);
+	transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.chevron-open {
+	transform: rotate(-90deg);
+}
+
+@media (width < 768px) {
+	.chevron {
+		transform: rotate(-90deg);
+	}
+
+	.chevron-open {
+		transform: rotate(0deg);
+	}
+
+	.card-selected {
+		border-bottom: none;
+		border-bottom-right-radius: 0;
+		border-bottom-left-radius: 0;
+	}
+}
+
+.badges {
+	display: inline-flex;
+	flex-shrink: 0;
+	gap: var(--space-6);
+	align-items: center;
+}
+
+.badge-generated {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--space-2) var(--space-8);
+	font-size: var(--font-size-label-xs);
+	font-weight: 700;
+	color: var(--brand-secondary, #6366f1);
+	text-transform: uppercase;
+	background-color: var(--surface-subtle, rgb(99 102 241 / 12%));
+	border: var(--border-width-hairline) solid currentcolor;
+	border-radius: var(--radius-full);
+}

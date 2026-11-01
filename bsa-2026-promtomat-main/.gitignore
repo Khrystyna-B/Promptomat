@@ -1,0 +1,55 @@
+# editors
+.idea
+.vscode
+
+# dependencies
+node_modules
+
+# oh-my-claudecode local state
+.omc/
+
+
+# production
+build
+
+# mcp release tarball (apps/mcp/readme.md, "Releasing")
+apps/mcp/*.tgz
+
+# misc
+.DS_Store
+.env
+
+# Local directory for downloaded plugins and modules (NEVER commit this)
+.terraform/
+
+# Hide workspace states
+.terraform.workspace
+
+# Local state files (if you are not using a remote backend like S3)
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Sensitive variable files (contains passwords, keys, etc.)
+*.tfvars
+*.tfvars.json
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+lambda.zip
+
+mise.toml
+
+# locally provisioned embedding model store (EMBEDDING_LOCAL_PATH)
+.model-cache

@@ -1,0 +1,23 @@
+{
+	"name": "@promptomat/shared",
+	"version": "1.0.0",
+	"type": "module",
+	"main": "src/index.ts",
+	"types": "src/index.ts",
+	"engines": {
+		"node": "24.x.x",
+		"pnpm": "11.x.x"
+	},
+	"scripts": {
+		"postinstall": "pnpm run build",
+		"lint:type": "tsc --noEmit",
+		"lint:js": "eslint . --max-warnings=0 --no-warn-ignored",
+		"lint": "concurrently \"pnpm:lint:*\"",
+		"build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json"
+	},
+	"dependencies": {
+		"@date-fns/tz": "1.5.0",
+		"date-fns": "4.4.0",
+		"zod": "4.4.3"
+	}
+}

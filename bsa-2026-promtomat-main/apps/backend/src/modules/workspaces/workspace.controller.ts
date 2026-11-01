@@ -1,0 +1,459 @@
+import { APIPath } from "~/libs/enums/enums.js";
+import {
+	type APIHandlerOptions,
+	type APIHandlerResponse,
+	BaseController,
+} from "~/libs/modules/controller/controller.js";
+import { HTTPCode, HTTPMethod } from "~/libs/modules/http/http.js";
+import { type Logger } from "~/libs/modules/logger/logger.js";
+
+import { WorkspacesApiPath } from "./libs/enums/enums.js";
+import { workspaceAccessHook } from "./libs/hooks/workspace-access.hook.js";
+import { workspaceOwnerAccessHook } from "./libs/hooks/workspace-owner-access.hook.js";
+import {
+	type WorkspaceCreateRequestDto,
+	type WorkspaceGetAllRequestDto,
+	type WorkspaceRouteParametersDto,
+	type WorkspaceUpdateRequestDto,
+} from "./libs/types/types.js";
+import {
+	workspaceCreationValidationSchema,
+	workspaceGetByQueryValidationSchema,
+	workspaceRouteParametersValidationSchema,
+	workspaceUpdateValidationSchema,
+} from "./libs/validation-schemas/validation-schemas.js";
+import { type WorkspaceService } from "./workspace.service.js";
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Workspace:
+ *       type: object
+ *       properties:
+ *         datasetTarget:
+ *           type: integer
+ *           enum: [500, 1000, 2500, 5000]
+ *         description:
+ *           type: string
+ *         id:
+ *           type: number
+ *           minimum: 1
+ *         name:
+ *           type: string
+ *         stackTags:
+ *           type: array
+ *           items:
+ *             type: string
+ *         userId:
+ *           type: number
+ *         visibility:
+ *           type: string
+ *     WorkspaceListItem:
+ *       allOf:
+ *         - $ref: "#/components/schemas/Workspace"
+ *         - type: object
+ *           required:
+ *             - averageScore
+ *             - memberCount
+ *             - promptCount
+ *             - topActivity
+ *           properties:
+ *             averageScore:
+ *               type: number
+ *               nullable: true
+ *             memberCount:
+ *               type: integer
+ *               minimum: 1
+ *             promptCount:
+ *               type: integer
+ *               minimum: 0
+ *             topActivity:
+ *               type: integer
+ *               minimum: 0
+ */
+class WorkspaceController extends BaseController {
+	private workspaceService: WorkspaceService;
+
+	public constructor(logger: Logger, workspaceService: WorkspaceService) {
+		super(logger, APIPath.WORKSPACES);
+
+		this.workspaceService = workspaceService;
+
+		this.addRoute({
+			handler: (options) =>
+				this.findAllByUserId(
+					options as APIHandlerOptions<{
+						query: WorkspaceGetAllRequestDto;
+					}>,
+				),
+			method: HTTPMethod.GET,
+			path: WorkspacesApiPath.ROOT,
+			validation: {
+				query: workspaceGetByQueryValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.findById(
+					options as APIHandlerOptions<{
+						params: WorkspaceRouteParametersDto;
+					}>,
+				),
+			method: HTTPMethod.GET,
+			path: WorkspacesApiPath.$WORKSPACE_ID,
+			preHandler: workspaceAccessHook(this.workspaceService),
+			validation: {
+				params: workspaceRouteParametersValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.create(
+					options as APIHandlerOptions<{
+						body: WorkspaceCreateRequestDto;
+					}>,
+				),
+			method: HTTPMethod.POST,
+			path: WorkspacesApiPath.ROOT,
+			validation: {
+				body: workspaceCreationValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.delete(
+					options as APIHandlerOptions<{
+						params: WorkspaceRouteParametersDto;
+					}>,
+				),
+			method: HTTPMethod.DELETE,
+			path: WorkspacesApiPath.$WORKSPACE_ID,
+			preHandler: workspaceOwnerAccessHook(this.workspaceService),
+			validation: {
+				params: workspaceRouteParametersValidationSchema,
+			},
+		});
+
+		this.addRoute({
+			handler: (options) =>
+				this.update(
+					options as APIHandlerOptions<{
+						body: WorkspaceUpdateRequestDto;
+						params: WorkspaceRouteParametersDto;
+					}>,
+				),
+			method: HTTPMethod.PATCH,
+			path: WorkspacesApiPath.$WORKSPACE_ID,
+			preHandler: workspaceOwnerAccessHook(this.workspaceService),
+			validation: {
+				body: workspaceUpdateValidationSchema,
+				params: workspaceRouteParametersValidationSchema,
+			},
+		});
+	}
+
+	/**
+	 * @swagger
+	 * /workspaces:
+	 *    post:
+	 *      description: Creates a new workspace
+	 *      security:
+	 *        - bearerAuth: []
+	 *      requestBody:
+	 *        required: true
+	 *        content:
+	 *          application/json:
+	 *            schema:
+	 *              type: object
+	 *              properties:
+	 *                datasetTarget:
+	 *                  type: integer
+	 *                  enum: [500, 1000, 2500, 5000]
+	 *                  default: 1000
+	 *                description:
+	 *                  type: string
+	 *                name:
+	 *                  type: string
+	 *                stackTags:
+	 *                  type: array
+	 *                  items:
+	 *                    type: string
+	 *                visibility:
+	 *                  type: string
+	 *      responses:
+	 *        201:
+	 *          description: Successful operation
+	 *          content:
+	 *            application/json:
+	 *              schema:
+	 *                $ref: "#/components/schemas/Workspace"
+	 *        409:
+	 *          description: Workspace name already exists
+	 */
+
+	private async create(
+		options: APIHandlerOptions<{
+			body: WorkspaceCreateRequestDto;
+		}>,
+	): Promise<APIHandlerResponse> {
+		return {
+			payload: await this.workspaceService.create({
+				...options.body,
+				userId: options.user?.id as number,
+			}),
+			status: HTTPCode.CREATED,
+		};
+	}
+
+	private async delete(
+		options: APIHandlerOptions<{
+			params: WorkspaceRouteParametersDto;
+		}>,
+	): Promise<APIHandlerResponse> {
+		await this.workspaceService.delete(
+			options.params.workspaceId,
+			options.user?.id as number,
+		);
+
+		return {
+			payload: null,
+			status: HTTPCode.NO_CONTENT,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /workspaces:
+	 *    get:
+	 *      description: Returns an array of user's workspaces
+	 *      security:
+	 *        - bearerAuth: []
+	 *      parameters:
+	 *        - in: query
+	 *          name: scope
+	 *          schema:
+	 *            type: string
+	 *            enum: [all, owned, shared]
+	 *            default: all
+	 *          description: Limits the list to owned or shared workspaces
+	 *        - in: query
+	 *          name: sort
+	 *          schema:
+	 *            type: string
+	 *            enum: [averageScore, creationDate, readiness, topActivity]
+	 *          description: Orders the list by creation date, recent activity, readiness, or average score
+	 *        - in: query
+	 *          name: workspaceName
+	 *          schema:
+	 *            type: string
+	 *          description: Search term to filter workspaces by name
+	 *      responses:
+	 *        200:
+	 *          description: Workspaces returned successfully
+	 *          content:
+	 *            application/json:
+	 *              schema:
+	 *                type: object
+	 *                required:
+	 *                  - items
+	 *                properties:
+	 *                  items:
+	 *                    type: array
+	 *                    items:
+	 *                      $ref: "#/components/schemas/WorkspaceListItem"
+	 *        401:
+	 *          description: Unauthorized
+	 *          content:
+	 *            application/json:
+	 *              schema:
+	 *                $ref: "#/components/schemas/Error"
+	 *        422:
+	 *          description: Invalid query parameters
+	 *          content:
+	 *            application/json:
+	 *              schema:
+	 *                $ref: "#/components/schemas/ValidationError"
+	 */
+	private async findAllByUserId(
+		options: APIHandlerOptions<{
+			query: WorkspaceGetAllRequestDto;
+		}>,
+	): Promise<APIHandlerResponse> {
+		return {
+			payload: await this.workspaceService.findAllByUserId(
+				options.user?.id as number,
+				options.query,
+			),
+			status: HTTPCode.OK,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /workspaces/{workspaceId}:
+	 *   get:
+	 *     description: Returns one workspace the user owns or contributes to
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: workspaceId
+	 *         required: true
+	 *         schema:
+	 *           type: integer
+	 *           minimum: 1
+	 *     responses:
+	 *       200:
+	 *         description: Workspace returned successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/WorkspaceListItem"
+	 *       401:
+	 *         description: Unauthorized
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       404:
+	 *         description: Workspace not found or the user does not have access
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       422:
+	 *         description: Invalid workspace id
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationError"
+	 */
+
+	private async findById(
+		options: APIHandlerOptions<{
+			params: WorkspaceRouteParametersDto;
+		}>,
+	): Promise<APIHandlerResponse> {
+		return {
+			payload: await this.workspaceService.findById(options.params.workspaceId),
+			status: HTTPCode.OK,
+		};
+	}
+
+	/**
+	 * @swagger
+	 * /workspaces/{workspaceId}:
+	 *   delete:
+	 *     description: Deletes an owned workspace
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: workspaceId
+	 *         required: true
+	 *         schema:
+	 *           type: integer
+	 *           minimum: 1
+	 *     responses:
+	 *       204:
+	 *         description: Workspace deleted successfully
+	 *       404:
+	 *         description: Workspace not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       409:
+	 *         description: The last owned workspace cannot be deleted
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       422:
+	 *         description: Invalid workspace id
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationError"
+	 *   patch:
+	 *     description: Updates an owned workspace
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: workspaceId
+	 *         required: true
+	 *         schema:
+	 *           type: integer
+	 *           minimum: 1
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             additionalProperties: false
+	 *             minProperties: 1
+	 *             properties:
+	 *               datasetTarget:
+	 *                 type: integer
+	 *                 enum: [500, 1000, 2500, 5000]
+	 *               description:
+	 *                 type: string
+	 *                 maxLength: 200
+	 *               name:
+	 *                 type: string
+	 *                 minLength: 3
+	 *                 maxLength: 50
+	 *               stackTags:
+	 *                 type: array
+	 *                 items:
+	 *                   type: string
+	 *     responses:
+	 *       200:
+	 *         description: Workspace updated successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Workspace"
+	 *       404:
+	 *         description: Workspace not found
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       409:
+	 *         description: Workspace with this name already exists
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/Error"
+	 *       422:
+	 *         description: Validation failed
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               $ref: "#/components/schemas/ValidationError"
+	 */
+
+	private async update(
+		options: APIHandlerOptions<{
+			body: WorkspaceUpdateRequestDto;
+			params: WorkspaceRouteParametersDto;
+		}>,
+	): Promise<APIHandlerResponse> {
+		return {
+			payload: await this.workspaceService.update(
+				options.params.workspaceId,
+				options.body,
+			),
+			status: HTTPCode.OK,
+		};
+	}
+}
+
+export { WorkspaceController };

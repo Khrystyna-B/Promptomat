@@ -1,0 +1,15 @@
+export {
+	type PromptCreateRequestDto,
+	type PromptDto,
+	type PromptGetAllResponseDto,
+	type PromptGetRecentResponseDto,
+	type PromptItemResponseDto,
+	type PromptRecentDto,
+	type PromptStreakDayDto,
+	type PromptStreakQueryDto,
+	type PromptStreakResponseDto,
+	type PromptUpdateBodyRequestDto,
+	type PromptUpdateIntentRequestDto,
+	type PromptUpdateScoreRequestDto,
+	type PromptWorkspaceQueryDto,
+} from "@promptomat/shared";

@@ -1,0 +1,7 @@
+.card {
+	background-color: var(--surface-inset);
+}
+
+.accent {
+	color: var(--text-accent);
+}
